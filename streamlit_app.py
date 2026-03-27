@@ -185,7 +185,7 @@ def load_and_process_data(file_bytes):
 # ==========================================
 # --- PLOTTING LOGIC ---
 # ==========================================
-def plot_extremes(df, component_type, scale=1.0):
+def plot_extremes(df, component_type, scale=1.0, marker_size=12, text_size=10):
     base = component_type.split('_')[0]
     unit = "[kN]" if base.startswith('F') else "[kNm]"
     target_col = f"{base} {unit}"
@@ -193,48 +193,78 @@ def plot_extremes(df, component_type, scale=1.0):
     df_plot = df[df['Component Type'] == component_type].copy()
     if df_plot.empty: return None
 
-    v_min, v_max = df_plot[target_col].min(), df_plot[target_col].max()
-    color_scale = get_extreme_color_scale(component_type)
+    # --- COLORSCALE LOGIC FIX ---
+    # Max extremes (Positive/Tension/High) -> Red/Orange
+    # Min extremes (Negative/Compression/Low) -> Blue/Green
+    color_scale = 'YlOrRd' if "MAX" in component_type else 'YlGnBu'
     
     fig = px.scatter(
         df_plot, x='X [m]', y='Y [m]', color=target_col, text=target_col,
-        color_continuous_scale=color_scale,
-        title=f"Reaction Extremes: {component_type} <{v_min:.0f}; {v_max:.0f}>",
+        color_continuous_scale=get_extreme_color_scale(component_type),
+        title=f"Reaction Extremes: {component_type}",
         labels={target_col: f"Value {unit}"},
         hover_data=['Support name', 'Load combinations']
     )
     
     fig.update_traces(
-        mode='markers+text', texttemplate='%{text:.0f}', textfont=dict(size=10),
-        marker=dict(size=12, line=dict(width=1.5, color='black')), textposition='top right'
+        mode='markers+text', 
+        texttemplate='%{text:.0f}', 
+        textfont=dict(size=text_size),  # <--- FIX: use the variable
+        marker=dict(size=marker_size, line=dict(width=1.5, color='black')), # <--- FIX: use the variable
+        textposition='top right'
     )
-    fig.update_yaxes(scaleanchor="x", scaleratio=1)
-    fig.update_layout(margin=dict(l=40, r=40, t=60, b=40))
+    
     adjust_figure_size(fig, df_plot, padding=10.0, scale=scale)
     return fig
 
-def plot_load_combination(df, load_comb, force_component, scale=1.0):
+def plot_load_combination(df, load_comb, force_component, scale=1.0, marker_size=12, text_size=10):
+    """
+    Generates a scatter plot for a specific Load Combination using 
+    centralized color logic and user-defined sizing.
+    """
+    # 1. Filter data
     df_plot = df[df['Load combinations'] == load_comb].copy()
-    if df_plot.empty: return None
+    if df_plot.empty: 
+        return None
 
-    v_min, v_max = df_plot[force_component].min(), df_plot[force_component].max()
-    color_scale = get_lc_color_scale(df_plot[force_component])
+    # 2. Get the colorscale from your helper method
+    color_scheme = get_lc_color_scale(df_plot[force_component])
     
+    # Determine if we need a midpoint (useful for diverging scales like 'rainbow' or 'RdBu')
+    v_min = df_plot[force_component].min()
+    v_max = df_plot[force_component].max()
+    c_mid = 0 if (v_min < 0 and v_max > 0) else None
+
+    # 3. Create Figure
     fig = px.scatter(
-        df_plot, x='X [m]', y='Y [m]', color=force_component, text=force_component,
-        color_continuous_scale=color_scale,
-        title=f"LC: {load_comb} | {force_component} <{v_min:.0f}; {v_max:.0f}>",
+        df_plot, 
+        x='X [m]', 
+        y='Y [m]', 
+        color=force_component, 
+        text=force_component,
+        color_continuous_scale=color_scheme,
+        color_continuous_midpoint=c_mid,
+        title=f"LC: {load_comb} | {force_component}",
         labels={force_component: "Value"},
         hover_data=['Support name']
     )
     
+    # 4. Apply UI controls (Marker & Text Size)
     fig.update_traces(
-        mode='markers+text', texttemplate='%{text:.0f}', textfont=dict(size=10),
-        marker=dict(size=12, line=dict(width=1.5, color='black')), textposition='top right'
+        mode='markers+text', 
+        texttemplate='%{text:.0f}', 
+        textfont=dict(size=text_size), 
+        marker=dict(
+            size=marker_size, 
+            line=dict(width=1.5, color='black')
+        ), 
+        textposition='top right'
     )
+    
+    # 5. Maintain structural aspect ratio and global scale
     fig.update_yaxes(scaleanchor="x", scaleratio=1)
-    fig.update_layout(margin=dict(l=40, r=40, t=60, b=40))
     adjust_figure_size(fig, df_plot, padding=10.0, scale=scale)
+    
     return fig
 
 # ==========================================
@@ -262,15 +292,16 @@ if uploaded_file:
     else:
         st.success("Data processed successfully!")
     
-    # Move the scale slider here, above the tabs
-    plot_scale = st.slider(
-        "📏 Plot Size Scale Factor", 
-        min_value=0.5, 
-        max_value=3.0, 
-        value=1.0, # Setting a slightly larger default for better readability
-        step=0.1,
-        help="Increase to make plots larger, decrease to see more at once. Aspect ratio is preserved."
-    )
+    # --- GLOBAL PLOT CONTROLS ---
+    st.markdown("### 🛠️ Plot Appearance")
+    ctrl_col1, ctrl_col2, ctrl_col3 = st.columns(3)
+
+    with ctrl_col1:
+        plot_scale = st.slider("📏 Plot Scale", 0.5, 3.0, 1.0, 0.1)
+    with ctrl_col2:
+        marker_size = st.slider("🔵 Marker Size", 5, 40, 12, 1)
+    with ctrl_col3:
+        text_size = st.slider("🔤 Text Size", 6, 24, 10, 1)
 
     # 2. Create Tabs for the UI
     tab1, tab2, tab3 = st.tabs(["🔥 Reaction Extremes", "📊 Load Combinations", "📋 Raw Data"])
@@ -278,33 +309,68 @@ if uploaded_file:
     # --- TAB 1: EXTREMES ---
     with tab1:
         st.subheader("Global Component Extremes")
-        # Get unique component types (Fx_MIN, Fx_MAX, etc.)
         comp_types = df_reaction_extremes['Component Type'].unique()
         selected_extreme = st.selectbox("Select Component Extreme:", sorted(comp_types))
         
         if selected_extreme:
-            fig_ex = plot_extremes(df_reaction_extremes, selected_extreme, scale=plot_scale)
+            # CRITICAL: You must pass marker_size and text_size here!
+            fig_ex = plot_extremes(
+                df_reaction_extremes, 
+                selected_extreme, 
+                scale=plot_scale, 
+                marker_size=marker_size, # Added this
+                text_size=text_size      # Added this
+            )
             if fig_ex:
-                # width='content' ensures our custom portrait/landscape sizing works
-                st.plotly_chart(fig_ex, width='content')
+                st.plotly_chart(fig_ex, width="content")
 
     # --- TAB 2: LOAD COMBINATIONS ---
     with tab2:
         st.subheader("Specific Load Combinations")
-        col1, col2 = st.columns(2)
+        col_lc1, col_lc2 = st.columns(2)
         
-        with col1:
+        with col_lc1:
             unique_lcs = df_final['Load combinations'].dropna().unique()
             selected_lc = st.selectbox("Select Load Combination:", sorted(unique_lcs))
-            
-        with col2:
+        with col_lc2:
             force_components = ['Fx [kN]', 'Fy [kN]', 'Fz [kN]', 'Mx [kNm]', 'My [kNm]', 'Mz [kNm]']
             selected_force = st.selectbox("Select Force Component:", force_components)
-            
+                
         if selected_lc and selected_force:
-            fig_lc = plot_load_combination(df_final, selected_lc, selected_force, scale=plot_scale)
+            # Generate Plot with all controls
+            fig_lc = plot_load_combination(df_final, selected_lc, selected_force, 
+                                        scale=plot_scale, marker_size=marker_size, text_size=text_size)
             if fig_lc:
-                st.plotly_chart(fig_lc, width='content')
+                st.plotly_chart(fig_lc, width="content")
+            
+            # --- DOWNLOAD LC DATA ---
+            st.divider()
+            df_lc_filtered = df_final[df_final['Load combinations'] == selected_lc].copy()
+            
+            st.write(f"📥 Download data for **{selected_lc}**")
+            base_lc_name = uploaded_file.name.rsplit('.', 1)[0]
+            lc_filename = f"{base_lc_name}_{selected_lc}"
+
+            dl_col1, dl_col2 = st.columns(2)
+            with dl_col1:
+                st.download_button(
+                    label=f"Download {selected_lc} as CSV",
+                    data=df_lc_filtered.to_csv(index=False).encode('utf-8'),
+                    file_name=f"{lc_filename}.csv",
+                    mime='text/csv',
+                    use_container_width=True
+                )
+            with dl_col2:
+                buffer_lc = io.BytesIO()
+                with pd.ExcelWriter(buffer_lc, engine='xlsxwriter') as writer:
+                    df_lc_filtered.to_excel(writer, index=False, sheet_name=selected_lc[:31]) # Excel sheet name limit
+                st.download_button(
+                    label=f"Download {selected_lc} as XLSX",
+                    data=buffer_lc.getvalue(),
+                    file_name=f"{lc_filename}.xlsx",
+                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    use_container_width=True
+                )
                 
     # --- TAB 3: RAW DATA (Bonus) ---
     with tab3:
