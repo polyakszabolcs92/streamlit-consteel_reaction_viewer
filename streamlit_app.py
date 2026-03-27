@@ -262,16 +262,14 @@ if uploaded_file:
     else:
         st.success("Data processed successfully!")
     
-    # --- SIDEBAR SETTINGS ---
-    with st.sidebar:
-        st.header("Plot Settings")
-        plot_scale = st.slider(
-            "Plot Size Scale Factor", 
-            min_value=0.5, 
-            max_value=2.5, 
-            value=1.0, # Defaulting to 1.0 makes it slightly larger than before
-            step=0.1,
-            help="Adjust the overall dimensions while maintaining aspect ratio."
+    # Move the scale slider here, above the tabs
+    plot_scale = st.slider(
+        "📏 Plot Size Scale Factor", 
+        min_value=0.5, 
+        max_value=3.0, 
+        value=1.0, # Setting a slightly larger default for better readability
+        step=0.1,
+        help="Increase to make plots larger, decrease to see more at once. Aspect ratio is preserved."
     )
 
     # 2. Create Tabs for the UI
