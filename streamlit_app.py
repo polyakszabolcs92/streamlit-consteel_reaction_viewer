@@ -23,36 +23,32 @@ def get_lc_color_scale(values):
         return 'rainbow'
     return 'YlOrRd' if abs(v_max) > abs(v_min) else 'YlGnBu_r'
 
-def adjust_figure_size(fig, df_plot, padding=10.0):
-    """Calculates optimal width/height and handles potential NaN values."""
-    # Ensure coordinates are numeric, dropping any rows that failed conversion
+def adjust_figure_size(fig, df_plot, padding=10.0, scale=1.0):
+    """Calculates optimal width/height with a user-defined scale factor."""
     x_coords = pd.to_numeric(df_plot['X [m]'], errors='coerce').dropna()
     y_coords = pd.to_numeric(df_plot['Y [m]'], errors='coerce').dropna()
 
     if x_coords.empty or y_coords.empty:
-        # Fallback to a standard size if data is missing
-        fig.update_layout(width=800, height=600)
+        fig.update_layout(width=int(800 * scale), height=int(600 * scale))
         return
 
     x_min, x_max = x_coords.min(), x_coords.max()
     y_min, y_max = y_coords.min(), y_coords.max()
     
-    x_span = (x_max - x_min) + (2 * padding)
-    y_span = (y_max - y_min) + (2 * padding)
+    x_span = max((x_max - x_min) + (2 * padding), 1.0)
+    y_span = max((y_max - y_min) + (2 * padding), 1.0)
     
-    # Ensure span is at least 1 to avoid division by zero/NaN
-    x_span = max(x_span, 1.0)
-    y_span = max(y_span, 1.0)
+    # Increase the base size and apply the scale factor
+    base_size = 800 * scale 
     
-    base_size = 700
     if x_span >= y_span:
         width = base_size
-        height = (y_span / x_span) * base_size + 120 
+        # The +120 is for the legend/title; we scale a portion of that too
+        height = (y_span / x_span) * base_size + (100 * scale) 
     else:
         height = base_size
-        width = (x_span / y_span) * base_size + 180 
+        width = (x_span / y_span) * base_size + (150 * scale) 
         
-    # Cast to int to ensure Plotly receives a clean integer pixel value
     fig.update_layout(width=int(width), height=int(height))
     fig.update_xaxes(range=[x_min - padding, x_max + padding])
     fig.update_yaxes(range=[y_min - padding, y_max + padding])
@@ -189,7 +185,7 @@ def load_and_process_data(file_bytes):
 # ==========================================
 # --- PLOTTING LOGIC ---
 # ==========================================
-def plot_extremes(df, component_type):
+def plot_extremes(df, component_type, scale=1.0):
     base = component_type.split('_')[0]
     unit = "[kN]" if base.startswith('F') else "[kNm]"
     target_col = f"{base} {unit}"
@@ -214,10 +210,10 @@ def plot_extremes(df, component_type):
     )
     fig.update_yaxes(scaleanchor="x", scaleratio=1)
     fig.update_layout(margin=dict(l=40, r=40, t=60, b=40))
-    adjust_figure_size(fig, df_plot, padding=10.0)
+    adjust_figure_size(fig, df_plot, padding=10.0, scale=scale)
     return fig
 
-def plot_load_combination(df, load_comb, force_component):
+def plot_load_combination(df, load_comb, force_component, scale=1.0):
     df_plot = df[df['Load combinations'] == load_comb].copy()
     if df_plot.empty: return None
 
@@ -238,7 +234,7 @@ def plot_load_combination(df, load_comb, force_component):
     )
     fig.update_yaxes(scaleanchor="x", scaleratio=1)
     fig.update_layout(margin=dict(l=40, r=40, t=60, b=40))
-    adjust_figure_size(fig, df_plot, padding=10.0)
+    adjust_figure_size(fig, df_plot, padding=10.0, scale=scale)
     return fig
 
 # ==========================================
@@ -266,7 +262,17 @@ if uploaded_file:
     else:
         st.success("Data processed successfully!")
     
-    
+    # --- SIDEBAR SETTINGS ---
+    with st.sidebar:
+        st.header("Plot Settings")
+        plot_scale = st.slider(
+            "Plot Size Scale Factor", 
+            min_value=0.5, 
+            max_value=2.5, 
+            value=1.0, # Defaulting to 1.0 makes it slightly larger than before
+            step=0.1,
+            help="Adjust the overall dimensions while maintaining aspect ratio."
+    )
 
     # 2. Create Tabs for the UI
     tab1, tab2, tab3 = st.tabs(["🔥 Reaction Extremes", "📊 Load Combinations", "📋 Raw Data"])
@@ -279,7 +285,7 @@ if uploaded_file:
         selected_extreme = st.selectbox("Select Component Extreme:", sorted(comp_types))
         
         if selected_extreme:
-            fig_ex = plot_extremes(df_reaction_extremes, selected_extreme)
+            fig_ex = plot_extremes(df_reaction_extremes, selected_extreme, scale=plot_scale)
             if fig_ex:
                 # width='content' ensures our custom portrait/landscape sizing works
                 st.plotly_chart(fig_ex, width='content')
@@ -298,7 +304,7 @@ if uploaded_file:
             selected_force = st.selectbox("Select Force Component:", force_components)
             
         if selected_lc and selected_force:
-            fig_lc = plot_load_combination(df_final, selected_lc, selected_force)
+            fig_lc = plot_load_combination(df_final, selected_lc, selected_force, scale=plot_scale)
             if fig_lc:
                 st.plotly_chart(fig_lc, width='content')
                 
