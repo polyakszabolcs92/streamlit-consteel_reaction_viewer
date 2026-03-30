@@ -192,16 +192,15 @@ def plot_extremes(df, component_type, scale=1.0, marker_size=12, text_size=10):
     
     df_plot = df[df['Component Type'] == component_type].copy()
     if df_plot.empty: return None
-
-    # --- COLORSCALE LOGIC FIX ---
-    # Max extremes (Positive/Tension/High) -> Red/Orange
-    # Min extremes (Negative/Compression/Low) -> Blue/Green
-    color_scale = 'YlOrRd' if "MAX" in component_type else 'YlGnBu'
     
+    # Calculate values for the title
+    v_min = df_plot[target_col].min()
+    v_max = df_plot[target_col].max()
+
     fig = px.scatter(
         df_plot, x='X [m]', y='Y [m]', color=target_col, text=target_col,
         color_continuous_scale=get_extreme_color_scale(component_type),
-        title=f"Reaction Extremes: {component_type}",
+        title=f"Reaction Extremes: {component_type} <{v_min:.1f}; {v_max:.1f}>",
         labels={target_col: f"Value {unit}"},
         hover_data=['Support name', 'Load combinations']
     )
@@ -244,7 +243,7 @@ def plot_load_combination(df, load_comb, force_component, scale=1.0, marker_size
         text=force_component,
         color_continuous_scale=color_scheme,
         color_continuous_midpoint=c_mid,
-        title=f"LC: {load_comb} | {force_component}",
+        title=f"LC: {load_comb} | {force_component} <{v_min:.1f}; {v_max:.1f}>",
         labels={force_component: "Value"},
         hover_data=['Support name']
     )
